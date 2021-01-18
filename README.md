@@ -26,6 +26,8 @@ optional arguments:
   --next INTERFACE OR IP
                         next hop for where non-China IP address, this is
                         usually the tunnel interface
+  --type NIC OR IP
+                        next hop type
 ```
 
 If you want to run this automatically, you can first edit `Makefile` and uncomment the BIRD reload code

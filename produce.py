@@ -8,10 +8,13 @@ import math
 parser = argparse.ArgumentParser(description='Generate non-China routes for BIRD.')
 parser.add_argument('--exclude', metavar='CIDR', type=str, nargs='*',
                     help='IPv4 ranges to exclude in CIDR format')
-parser.add_argument('--next', default="wg0", metavar = "INTERFACE OR IP",
+parser.add_argument('--next', default="tun0", metavar="INTERFACE OR IP",
                     help='next hop for where non-China IP address, this is usually the tunnel interface')
+parser.add_argument('--type', default="nic", metavar="NIC OR IP",
+                    help='next hop type')
 
 args = parser.parse_args()
+
 
 class Node:
     def __init__(self, cidr, parent=None):
@@ -23,10 +26,12 @@ class Node:
     def __repr__(self):
         return "<Node %s>" % self.cidr
 
+
 def dump_tree(lst, ident=0):
     for n in lst:
         print("+" * ident + str(n))
         dump_tree(n.child, ident + 1)
+
 
 def dump_bird(lst, f):
     for n in lst:
@@ -37,7 +42,13 @@ def dump_bird(lst, f):
             dump_bird(n.child, f)
 
         elif not n.dead:
-            f.write('route %s via "%s";\n' % (n.cidr, args.next))
+            if "type" not in args or args.type.lower() == "nic":
+                f.write('route %s via "%s";\n' % (n.cidr, args.next))
+            elif args.type.lower() == "ip":
+                f.write('route %s via %s;\n' % (n.cidr, args.next))
+            else:
+                exit("Next Type Required! ")
+
 
 RESERVED = [
     IPv4Network('0.0.0.0/8'),
@@ -70,6 +81,7 @@ if args.exclude:
 
 IPV6_UNICAST = IPv6Network('2000::/3')
 
+
 def subtract_cidr(sub_from, sub_by):
     for cidr_to_sub in sub_by:
         for n in sub_from:
@@ -86,24 +98,25 @@ def subtract_cidr(sub_from, sub_by):
 
                 break
 
+
 root = []
 root_v6 = [Node(IPV6_UNICAST)]
 
 with open("ipv4-address-space.csv", newline='') as f:
-    f.readline() # skip the title
+    f.readline()  # skip the title
 
     reader = csv.reader(f, quoting=csv.QUOTE_MINIMAL)
     for cidr in reader:
         if cidr[5] == "ALLOCATED" or cidr[5] == "LEGACY":
             block = cidr[0]
-            cidr = "%s.0.0.0%s" % (block[:3].lstrip("0"), block[-2:], )
+            cidr = "%s.0.0.0%s" % (block[:3].lstrip("0"), block[-2:],)
             root.append(Node(IPv4Network(cidr)))
 
 with open("delegated-apnic-latest") as f:
     for line in f:
         if "apnic|CN|ipv4|" in line:
             line = line.split("|")
-            a = "%s/%d" % (line[3], 32 - math.log(int(line[4]), 2), )
+            a = "%s/%d" % (line[3], 32 - math.log(int(line[4]), 2),)
             a = IPv4Network(a)
             subtract_cidr(root, (a,))
 
