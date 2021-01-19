@@ -1,17 +1,20 @@
-#!/usr/bin/env python3
+#! /usr/bin/anaconda3/bin/python
 import argparse
 import urllib.request
 import csv
 from ipaddress import IPv4Network, IPv6Network
 import math
 
-parser = argparse.ArgumentParser(description='Generate non-China routes for BIRD.')
-parser.add_argument('--exclude', metavar='CIDR', type=str, nargs='*',
-                    help='IPv4 ranges to exclude in CIDR format')
-parser.add_argument('--next', default="tun0", metavar="INTERFACE OR IP",
-                    help='next hop for where non-China IP address, this is usually the tunnel interface')
-parser.add_argument('--type', default="nic", metavar="NIC OR IP",
-                    help='next hop type')
+parser = argparse.ArgumentParser(description='Generate Area routes for BIRD.')
+parser.add_argument('--area', default="cn", metavar="country(area) code",
+                    help='output file name, default non-cn-routes4.conf')
+parser.add_argument('--exclude', metavar='CIDR', type=str, nargs='*', help='IPv4 ranges to exclude in CIDR format')
+parser.add_argument('--next', default="tun0", metavar="INTERFACE NAME OR IP ADDRESS",
+                    help='next hop for non-China IP address, this is usually the tunnel interface, default tun0')
+parser.add_argument('--type', default="INTERFACE", metavar="INTERFACE OR IP",
+                    help='next hop type, default INTERFACE')
+parser.add_argument('--out', default="cn-routes4.conf", metavar="filename.conf",
+                    help='output file name, default non-cn-routes4.conf')
 
 args = parser.parse_args()
 
@@ -42,7 +45,7 @@ def dump_bird(lst, f):
             dump_bird(n.child, f)
 
         elif not n.dead:
-            if "type" not in args or args.type.lower() == "nic":
+            if "type" not in args or args.type.lower() == "interface":
                 f.write('route %s via "%s";\n' % (n.cidr, args.next))
             elif args.type.lower() == "ip":
                 f.write('route %s via %s;\n' % (n.cidr, args.next))
@@ -120,19 +123,8 @@ with open("delegated-apnic-latest") as f:
             a = IPv4Network(a)
             subtract_cidr(root, (a,))
 
-        elif "apnic|CN|ipv6|" in line:
-            line = line.split("|")
-            a = "%s/%s" % (line[3], line[4])
-            a = IPv6Network(a)
-            subtract_cidr(root_v6, (a,))
-
 # get rid of reserved addresses
 subtract_cidr(root, RESERVED)
-# get rid of reserved addresses
-subtract_cidr(root_v6, RESERVED_V6)
 
-with open("routes4.conf", "w") as f:
+with open(args.out, "w") as f:
     dump_bird(root, f)
-
-# with open("routes6.conf", "w") as f:
-#     dump_bird(root_v6, f)
